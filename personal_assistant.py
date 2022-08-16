@@ -80,7 +80,15 @@ def play_prerecorded_clip(voice_name,clip_name):
     try:
         playsound(voice_name+'_clips\\'+clip_name+'.wav')
     except Exception as e:
+        pass
         playsound(voice_name+'_clips\\'+clip_name+'.mp3')
+
+
+def play_non_voice_clip(clip_name):
+    try:
+        playsound('non_voice_clips\\'+clip_name+'.wav')
+    except Exception as e:
+        playsound('non_voice_clips\\'+clip_name+'.mp3')
 
 
 
@@ -89,7 +97,7 @@ def speech_to_text():
     recognizer = sr.Recognizer()
     with sr.Microphone() as source:
         print("Listening...")
-        recognizer.adjust_for_ambient_noise(source)
+        recognizer.adjust_for_ambient_noise(source, duration=1)
         audio = recognizer.listen(source)
         try:
             print("Recognizing...")
@@ -104,17 +112,37 @@ def speech_to_text():
 
             else:
                 for name in voice_names.keys():
-                    bee_movie_regex = "["+name[0].upper() +name[0]+ "]" + name[1:] + "\s.*\s?([Bb]ee|b) [Mm]ovie"
+                    bee_movie_regex = ".*?["+name[0].upper() +name[0]+ "]" + name[1:] + "\s.*\s?([Bb]ee|b) [Mm]ovie"
                     bee_movie_match = re.match(bee_movie_regex, query)
 
-                    introduction_regex = "["+name[0].upper() +name[0]+ "]" + name[1:] + "\s.*\s?introduce[d]*"
+                    introduction_regex = ".*?["+name[0].upper() +name[0]+ "]" + name[1:] + "\s.*\s?introduce[d]*"
                     introduction_match = re.match(introduction_regex, query)
+
+
+                    
+
+                    
                     if bee_movie_match:
                         play_prerecorded_clip(name,"bee_movie_script")
                         
                     elif introduction_match:
                         print("introduction")
                         play_prerecorded_clip(name,"introduction")
+                
+                seinfeld_regex = ".*?what[']*s the deal with.*?"
+                seinfeld_match = re.match(seinfeld_regex, query)
+                if seinfeld_match:
+                    play_non_voice_clip("seinfeld")
+
+                despacito_regex = ".*?sad.*?[Dd]espacito.*?"
+                despacito_match = re.match(despacito_regex, query)
+                if despacito_match:
+                    play_non_voice_clip("despacito")
+
+                law_and_order_regex = ".*?[Jj]ustice.*?"
+                law_and_order_match = re.match(law_and_order_regex, query)
+                if law_and_order_match:
+                    play_non_voice_clip("law_and_order")
 
         except sr.UnknownValueError:
             print("Could not understand audio")
@@ -122,17 +150,6 @@ def speech_to_text():
 
 while True:
     speech_to_text()
-
-#text_to_speech("six")
-
-
-def test():
-    for root, directory, files in os.walk("."):
-        print(root)
-        print(directory)
-
-
-#test()
 
 
 
