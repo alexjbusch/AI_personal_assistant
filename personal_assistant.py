@@ -1,6 +1,7 @@
 from resemble import Resemble
 import requests
 import urllib.request
+import json
 from playsound import playsound
 import speech_recognition as sr
 import re
@@ -9,6 +10,16 @@ import sys
 import time
 import os
 from dotenv import dotenv_values
+import logging
+
+
+import get_wikipedia_text
+#logging.basicConfig(level=logging.DEBUG)
+
+
+current_voice_clip_number = 0
+
+
 
 config = dotenv_values(".env")
 try:
@@ -25,17 +36,16 @@ project_uuid = "b96e7ffc"
 
 willow_id = "ce731770"
 aiden_id = "aiden"
+alextwo_id = "4d5e5d99"
 
-voice_names = {"aiden":"","willow":"ce731770"}
-
-
-voice_uuid = willow_id
+voice_names = {"aiden":"aiden","willow":"ce731770", "alex to":"4d5e5d99"}
 
 
-def create_voice_clip(text):
-    callback_uri = 'https://example.com/callback/resemble-clip'
-    
-    # this is the clip we want to create
+voice_uuid = alextwo_id
+
+def text_to_speech(text, voice_uuid = voice_names["alex to"]):
+    callback_uri = 'http://54.165.100.224:5000/'
+    # this creates an audio clip
     response = Resemble.v2.clips.create_async(
       project_uuid,
       voice_uuid,
@@ -49,31 +59,37 @@ def create_voice_clip(text):
       is_public=None,
       is_archived=None
     )
-    #this is in case I don't want to use clips.all
-    clip = response['item']['uuid']
 
+    r = requests.get(callback_uri)
 
-def play_voice_clip():
-    response = Resemble.v2.clips.all(project_uuid, page, page_size)
-    clips = response['items']
+    """
+    try:
+        r.raise_for_status()
+    except HTTPException as e:
+        print(e)
+        raise e
+    """ 
     
-    print(clips)
+    c = r.content
+    response = c.decode("utf-8")
+    if response == "no data":
+        while response == "no data":
+            #print("pinging server")
+            response = requests.get(callback_uri).content.decode("utf-8") 
+    
+    json_object = json.loads(response)
+    print(json_object)
+    url_of_audio_file = json_object["url"]
+    print(url_of_audio_file)
 
-    url = clips[0]['audio_src']
+    global current_voice_clip_number
+    current_voice_clip_number += 1
 
-    file = urllib.request.urlretrieve(url, "response.wav")
-    print(file)
-    playsound('response.wav')
-
-
-
-def text_to_speech(text):
-    create_voice_clip(text)
-    print("Created voice clip!")
-
-    response = os.popen("py play_voice_clip.py")
-    sys.exit()
-    print(response)
+    voice_clip = "response"+str(current_voice_clip_number)+".wav"
+    file, headers = urllib.request.urlretrieve(url_of_audio_file, voice_clip)
+    print(headers)
+    playsound(voice_clip)
+    
 
 
 def play_prerecorded_clip(voice_name,clip_name):
@@ -92,6 +108,14 @@ def play_non_voice_clip(clip_name):
 
 
 
+def delete_all_clips():
+    response = Resemble.v2.clips.all(project_uuid, page, page_size)
+    clips = response['items']
+    for clip in clips:
+        clip_uuid = clip["uuid"]
+        response = Resemble.v2.clips.delete(project_uuid, clip_uuid)
+        print(response)
+
 
 def speech_to_text():
     recognizer = sr.Recognizer()
@@ -103,24 +127,44 @@ def speech_to_text():
             print("Recognizing...")
             query = recognizer.recognize_google(audio)
             print(query)
+
+            """
             keyword_found = re.search('[wW]illow say', query)
-            print(keyword_found)
             if keyword_found: 
                 keyword_location = keyword_found.span()[1]
                 text = query[keyword_location:]
                 text_to_speech(text)
+            """
+            if (match := re.search(r'(.+) say (.+)', query)):
+                voice_name = match.group(1).lower()
+                text = match.group(2)
+                if voice_name in voice_names.keys():
+                    #print("voice id number: "+voice_names[voice_name])
+                    text_to_speech(text, voice_uuid = voice_names[voice_name])
+                else:
+                    print(voice_name+ " not in "+str(voice_names.keys()))
+
 
             else:
                 for name in voice_names.keys():
                     bee_movie_regex = ".*?["+name[0].upper() +name[0]+ "]" + name[1:] + "\s.*\s?([Bb]ee|b) [Mm]ovie"
                     bee_movie_match = re.match(bee_movie_regex, query)
 
+
+                    what_question_regex = ".*?["+name[0].upper() +name[0]+ "]" + name[1:] + " what is(.*)"
+        
+
+                    what_question_match = re.match(what_question_regex, query)
+                    if what_question_match:
+                        subject = what_question_match.group(1)
+                        subject = re.sub('\A\s+(a|an)(\s+)', '', subject)
+                        print(subject)
+                        answer = get_wikipedia_text.Text(subject)
+                        text_to_speech(answer, voice_uuid = voice_names[name])
+
                     introduction_regex = ".*?["+name[0].upper() +name[0]+ "]" + name[1:] + "\s.*\s?introduce[d]*"
-                    introduction_match = re.match(introduction_regex, query)
-
-
-                    
-
+                    introduction_match = re.match(introduction_regex, query)               
+    
                     
                     if bee_movie_match:
                         play_prerecorded_clip(name,"bee_movie_script")
@@ -128,6 +172,9 @@ def speech_to_text():
                     elif introduction_match:
                         print("introduction")
                         play_prerecorded_clip(name,"introduction")
+
+
+                    
                 
                 seinfeld_regex = ".*?what[']*s the deal with.*?"
                 seinfeld_match = re.match(seinfeld_regex, query)
@@ -148,8 +195,59 @@ def speech_to_text():
             print("Could not understand audio")
 
 
+delete_all_clips()
+
+
 while True:
     speech_to_text()
 
+"""
+text_to_speech("test_1")
+text_to_speech("test_2")
+"""
+
+#text_to_speech("testing one")
+#text_to_speech("testing two")
+
+def test(text):
+    """
+    callback_uri = 'http://54.165.100.224:5000/'
+    # this creates an audio clip
+    response = Resemble.v2.clips.create_async(
+      project_uuid,
+      voice_uuid,
+      callback_uri,
+      text,
+      title=None,
+      sample_rate=None,
+      output_format=None,
+      precision=None,
+      include_timestamps=None,
+      is_public=None,
+      is_archived=None
+    )
+    #print(response)
 
 
+    # this gets all clips we've created
+    #response = Resemble.v2.clips.all(project_uuid, page, page_size)
+    #clips = response['items']
+    #print(clips)
+
+    
+    response = requests.get(callback_uri).content.decode("utf-8") 
+    if response == "no data":
+        while response == "no data":
+            print("pinging server")
+            response = requests.get(callback_uri).content.decode("utf-8") 
+    
+    print(response)
+    json_object = json.loads(response)
+    url_of_audio_file = json_object["url"]
+    """
+    url_of_audio_file = "https://app.resemble.ai/rails/active_storage/blobs/redirect/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCRDFtTndRPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--4a1d350861cdb6c3017bd5e4237bd77ecdb1d54f/366ee89e-79bb41e1.wav"
+    #url_of_audio_file = "https://app.resemble.ai/rails/active_storage/blobs/redirect/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCUDFvTndRPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--9c1d1ee163e300e66839d97cf64db81f79717743/e58161f2-cf47608f.wav"
+    file = urllib.request.urlretrieve(url_of_audio_file, "response.wav")
+    playsound("response.wav")
+
+#test("")
